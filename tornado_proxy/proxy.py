@@ -66,7 +66,9 @@ class ProxyHandler(tornado.web.RequestHandler):
         req = tornado.httpclient.HTTPRequest(url=self.request.uri,
                                              method=self.request.method, body=self.request.body,
                                              headers=self.request.headers, follow_redirects=False,
-                                             allow_nonstandard_methods=True)
+                                             allow_nonstandard_methods=True,
+                                             connect_timeout=30.0, request_timeout=120.0,
+        )
 
         client = tornado.httpclient.AsyncHTTPClient(max_clients=5000)
         try:
