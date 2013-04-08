@@ -36,6 +36,7 @@ import tornado.httpclient
 
 __all__ = ['ProxyHandler', 'run_proxy']
 
+
 class ProxyHandler(tornado.web.RequestHandler):
     SUPPORTED_METHODS = ['GET', 'POST', 'CONNECT']
 
@@ -47,14 +48,14 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         def handle_response(response):
             if response.error and not isinstance(response.error,
-                    tornado.httpclient.HTTPError):
+                                                 tornado.httpclient.HTTPError):
                 self.set_status(500)
                 self.write('Internal server error:\n' + str(response.error))
                 self.finish()
             else:
                 self.set_status(response.code)
                 for header in ('Date', 'Cache-Control', 'Server',
-                        'Content-Type', 'Location'):
+                               'Content-Type', 'Location'):
                     v = response.headers.get(header)
                     if v:
                         self.set_header(header, v)
@@ -63,11 +64,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                 self.finish()
 
         req = tornado.httpclient.HTTPRequest(url=self.request.uri,
-            method=self.request.method, body=self.request.body,
-            headers=self.request.headers, follow_redirects=False,
-            allow_nonstandard_methods=True)
+                                             method=self.request.method, body=self.request.body,
+                                             headers=self.request.headers, follow_redirects=False,
+                                             allow_nonstandard_methods=True)
 
-        client = tornado.httpclient.AsyncHTTPClient()
+        client = tornado.httpclient.AsyncHTTPClient(max_clients=5000)
         try:
             client.fetch(req, handle_response)
         except tornado.httpclient.HTTPError, e:
@@ -124,12 +125,13 @@ def run_proxy(port, start_ioloop=True):
     """
 
     app = tornado.web.Application([
-        (r'.*', ProxyHandler),
-    ], debug=True)
+                                      (r'.*', ProxyHandler),
+                                  ], debug=True)
     app.listen(port)
     ioloop = tornado.ioloop.IOLoop.instance()
     if start_ioloop:
         ioloop.start()
+
 
 if __name__ == '__main__':
     port = 8888
