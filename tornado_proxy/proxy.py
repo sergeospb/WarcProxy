@@ -32,12 +32,14 @@ import cPickle
 import zlib
 import base64
 import cStringIO
+import weakref
 
 import tornado.httpserver
 import tornado.ioloop
 import tornado.iostream
 import tornado.web
 import tornado.httpclient
+from scrapy.utils.url import canonicalize_url
 
 import tornadoasyncmemcache as memcache
 
@@ -47,12 +49,39 @@ ccs = memcache.ClientPool(['127.0.0.1:11211'], maxclients=5000)
 __all__ = ['ProxyHandler', 'run_proxy']
 from  tornado.httpclient import HTTPResponse
 
+CACHED_CODES = [200, 301, 302, 303, 307]
 
-def fingerprint_request(req):
-    _md5 = hashlib.md5(str(req.url))
-    _md5.update(str(req.method))
-    _md5.update(str(req.body))
-    return _md5.hexdigest()
+_fingerprint_cache = weakref.WeakKeyDictionary()
+
+
+def fingerprint_request(req, arguments=None):
+    """
+    from scrapy
+    Return the request fingerprint.
+
+    The request fingerprint is a hash that uniquely identifies the resource the
+    request points to. For example, take the following two urls:
+
+    http://www.example.com/query?id=111&cat=222
+    http://www.example.com/query?cat=222&id=111
+
+    Even though those are two different URLs both point to the same resource
+    and are equivalent (ie. they should return the same response).
+
+    """
+    cache = _fingerprint_cache.setdefault(req, {})
+    url = canonicalize_url(req.url)
+    if url not in cache:
+        fp = hashlib.sha1()
+        fp.update(str(url))
+        fp.update(str(req.method))
+        fp.update(str(req.body))
+        if arguments:
+            for name, value in arguments.iteritems():
+                fp.update("%s%s" % (name, value))
+        cache[url] = fp.hexdigest()
+        #pdb.set_trace()
+    return cache[url]
 
 
 def serialize_response(response):
@@ -64,6 +93,7 @@ def serialize_response(response):
         'time_info': response.time_info,
         'request_time': response.request_time,
     }
+
     serialized = cPickle.dumps(result)
     return base64.encodestring(zlib.compress(serialized))
 
@@ -112,12 +142,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                         self.set_header(header, v)
                 if response.body:
                     self.write(response.body)
-                    if not self._memcached:
-                        def mem_set(data):
-                            pass
+                if not self._memcached and response.code in CACHED_CODES:
+                    def mem_set(data):
+                        pass
 
-                        dumped = serialize_response(response)
-                        ccs.set(self.fingerprint, dumped, callback=mem_set)
+                    dumped = serialize_response(response)
+                    ccs.set(self.fingerprint, dumped, callback=mem_set)
                 self.finish()
 
         req = tornado.httpclient.HTTPRequest(url=self.request.uri,
@@ -126,7 +156,7 @@ class ProxyHandler(tornado.web.RequestHandler):
                                              allow_nonstandard_methods=True,
                                              connect_timeout=30.0, request_timeout=120.0,
         )
-        self.fingerprint = fingerprint_request(req)
+        self.fingerprint = fingerprint_request(req, self.request.arguments)
 
         def mem_get(dumped):
             if not dumped:
