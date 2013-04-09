@@ -3,7 +3,7 @@ import functools
 import os.path
 import datetime
 import anydbm
-import StringIO
+from  cStringIO import StringIO
 import httplib
 import hashlib
 
@@ -59,7 +59,7 @@ class WarcWriter(object):
             return
         self.db[hash_url] = '1'
         #Content-Encoding: gzip
-        payload = StringIO.StringIO()
+        payload = StringIO()
 
         status_reason = httplib.responses.get(http_code, '-')
         payload.write('HTTP/1.1 %d %s\r\n' % (http_code, status_reason))

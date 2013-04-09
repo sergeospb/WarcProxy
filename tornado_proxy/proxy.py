@@ -31,7 +31,7 @@ import hashlib
 import cPickle
 import zlib
 import base64
-import cStringIO
+from  cStringIO import StringIO
 import weakref
 
 import tornado.httpserver
@@ -101,7 +101,7 @@ def serialize_response(response):
 def unserialize_response(dumped, request):
     serialized = zlib.decompress(base64.decodestring(dumped))
     result = cPickle.loads(serialized)
-    buffer = cStringIO.StringIO()
+    buffer = StringIO()
     buffer.write(result['body'])
     #response.buffer = buffer
     response = HTTPResponse(
