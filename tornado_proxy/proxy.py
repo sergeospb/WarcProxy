@@ -27,6 +27,11 @@
 
 import sys
 import socket
+import hashlib
+import cPickle
+import zlib
+import base64
+import cStringIO
 
 import tornado.httpserver
 import tornado.ioloop
@@ -34,7 +39,52 @@ import tornado.iostream
 import tornado.web
 import tornado.httpclient
 
+import tornadoasyncmemcache as memcache
+
+
+ccs = memcache.ClientPool(['127.0.0.1:11211'], maxclients=5000)
+
 __all__ = ['ProxyHandler', 'run_proxy']
+from  tornado.httpclient import HTTPResponse
+
+
+def fingerprint_request(req):
+    _md5 = hashlib.md5(str(req.url))
+    _md5.update(str(req.method))
+    _md5.update(str(req.body))
+    return _md5.hexdigest()
+
+
+def serialize_response(response):
+    result = {
+        'body': response.body,
+        'code': response.code,
+        'effective_url': response.effective_url,
+        'headers': response.headers,
+        'time_info': response.time_info,
+        'request_time': response.request_time,
+    }
+    serialized = cPickle.dumps(result)
+    return base64.encodestring(zlib.compress(serialized))
+
+
+def unserialize_response(dumped, request):
+    serialized = zlib.decompress(base64.decodestring(dumped))
+    result = cPickle.loads(serialized)
+    buffer = cStringIO.StringIO()
+    buffer.write(result['body'])
+    #response.buffer = buffer
+    response = HTTPResponse(
+        request=request,
+        effective_url=result['effective_url'],
+        code=result['code'],
+        request_time=result['request_time'],
+        headers=result['headers'],
+        time_info=result['time_info'],
+        buffer=buffer,
+    )
+
+    return response
 
 
 class ProxyHandler(tornado.web.RequestHandler):
@@ -45,6 +95,7 @@ class ProxyHandler(tornado.web.RequestHandler):
 
     @tornado.web.asynchronous
     def get(self):
+        self._memcached = False
 
         def handle_response(response):
             if response.error and not isinstance(response.error,
@@ -61,6 +112,12 @@ class ProxyHandler(tornado.web.RequestHandler):
                         self.set_header(header, v)
                 if response.body:
                     self.write(response.body)
+                    if not self._memcached:
+                        def mem_set(data):
+                            pass
+
+                        dumped = serialize_response(response)
+                        ccs.set(self.fingerprint, dumped, callback=mem_set)
                 self.finish()
 
         req = tornado.httpclient.HTTPRequest(url=self.request.uri,
@@ -69,17 +126,28 @@ class ProxyHandler(tornado.web.RequestHandler):
                                              allow_nonstandard_methods=True,
                                              connect_timeout=30.0, request_timeout=120.0,
         )
+        self.fingerprint = fingerprint_request(req)
 
-        client = tornado.httpclient.AsyncHTTPClient(max_clients=5000)
-        try:
-            client.fetch(req, handle_response)
-        except tornado.httpclient.HTTPError, e:
-            if hasattr(e, 'response') and e.response:
-                self.handle_response(e.response)
+        def mem_get(dumped):
+            if not dumped:
+                client = tornado.httpclient.AsyncHTTPClient(max_clients=5000)
+                try:
+                    client.fetch(req, handle_response)
+                except tornado.httpclient.HTTPError, e:
+                    if hasattr(e, 'response') and e.response:
+                        self.handle_response(e.response)
+                    else:
+                        self.set_status(500)
+                        self.write('Internal server error:\n' + str(e))
+                        self.finish()
             else:
-                self.set_status(500)
-                self.write('Internal server error:\n' + str(e))
-                self.finish()
+                response = unserialize_response(dumped, req)
+                self._memcached = True
+                handle_response(response)
+                #pdb.set_trace()
+
+        ccs.get(self.fingerprint, callback=mem_get)
+
 
     @tornado.web.asynchronous
     def post(self):

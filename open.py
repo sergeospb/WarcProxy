@@ -12,5 +12,5 @@ run_proxy(port, start_ioloop=False)
 ili = tornado.ioloop.IOLoop.instance()
 tornado.ioloop.PeriodicCallback(lambda: None, 500, ili).start()
 
-print "Opening proxy on port {}".format(port)
+logging.debug("Opening proxy on port %s" % port)
 ili.start()
