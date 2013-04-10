@@ -150,11 +150,13 @@ class ProxyHandler(tornado.web.RequestHandler):
                     ccs.set(self.fingerprint, dumped, callback=mem_set)
                 self.finish()
 
+        #http://www.squid-cache.org/Doc/config/read_timeout/ 15 min
+        #http://www.squid-cache.org/Doc/config/connect_timeout/ 1 min
         req = tornado.httpclient.HTTPRequest(url=self.request.uri,
                                              method=self.request.method, body=self.request.body,
                                              headers=self.request.headers, follow_redirects=False,
                                              allow_nonstandard_methods=True,
-                                             connect_timeout=30.0, request_timeout=120.0,
+                                             connect_timeout=float(1 * 50), request_timeout=float(15 * 60),
         )
         self.fingerprint = fingerprint_request(req, self.request.arguments)
 
