@@ -1,0 +1,120 @@
+Server - http://www.hetzner.de/en/hosting/produkte_rootserver/ex4s
+Resource NOT in memcached db:
+
+ab -X 127.0.0.1:8001 -c 200 -n 10000 http://www.google.com/
+This is ApacheBench, Version 2.3 <$Revision: 655654 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking www.google.com [through 192.168.71.150:8001] (be patient)
+Completed 1000 requests
+Completed 2000 requests
+Completed 3000 requests
+Completed 4000 requests
+Completed 5000 requests
+Completed 6000 requests
+Completed 7000 requests
+Completed 8000 requests
+Completed 9000 requests
+Completed 10000 requests
+Finished 10000 requests
+
+
+Server Software:        gws
+Server Hostname:        www.google.com
+Server Port:            80
+
+Document Path:          /
+Document Length:        10861 bytes
+
+Concurrency Level:      200
+Time taken for tests:   18.670 seconds
+Complete requests:      10000
+Failed requests:        9989
+   (Connect: 0, Receive: 0, Length: 9989, Exceptions: 0)
+Write errors:           0
+Total transferred:      110705172 bytes
+HTML transferred:       108485172 bytes
+Requests per second:    535.61 [#/sec] (mean)
+Time per request:       373.408 [ms] (mean)
+Time per request:       1.867 [ms] (mean, across all concurrent requests)
+Transfer rate:          5790.48 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    4  64.7      0    1004
+Processing:   116  368 678.9    266    5587
+Waiting:      116  368 678.9    266    5587
+Total:        116  372 708.5    266    5681
+
+Percentage of the requests served within a certain time (ms)
+  50%    266
+  66%    306
+  75%    335
+  80%    353
+  90%    387
+  95%    431
+  98%   4994
+  99%   5243
+ 100%   5681 (longest request)
+
+
+#######################################################################
+
+Resource in memcached db:
+ab -X 127.0.0.0.1:8001 -c 200 -n 10000 http://www.google.com/
+
+This is ApacheBench, Version 2.3 <$Revision: 655654 $>
+Copyright 1996 Adam Twiss, Zeus Technology Ltd, http://www.zeustech.net/
+Licensed to The Apache Software Foundation, http://www.apache.org/
+
+Benchmarking www.google.com [through 192.168.71.150:8001] (be patient)
+Completed 1000 requests
+Completed 2000 requests
+Completed 3000 requests
+Completed 4000 requests
+Completed 5000 requests
+Completed 6000 requests
+Completed 7000 requests
+Completed 8000 requests
+Completed 9000 requests
+Completed 10000 requests
+Finished 10000 requests
+
+
+Server Software:        gws
+Server Hostname:        www.google.com
+Server Port:            80
+
+Document Path:          /
+Document Length:        10845 bytes
+
+Concurrency Level:      200
+Time taken for tests:   11.275 seconds
+Complete requests:      10000
+Failed requests:        0
+Write errors:           0
+Total transferred:      110670000 bytes
+HTML transferred:       108450000 bytes
+Requests per second:    886.95 [#/sec] (mean)
+Time per request:       225.492 [ms] (mean)
+Time per request:       1.127 [ms] (mean, across all concurrent requests)
+Transfer rate:          9585.82 [Kbytes/sec] received
+
+Connection Times (ms)
+              min  mean[+/-sd] median   max
+Connect:        0    0   0.9      0      10
+Processing:   144  223  51.2    212     388
+Waiting:      143  223  51.2    212     388
+Total:        150  224  51.3    213     388
+
+Percentage of the requests served within a certain time (ms)
+  50%    213
+  66%    243
+  75%    260
+  80%    268
+  90%    295
+  95%    322
+  98%    345
+  99%    362
+ 100%    388 (longest request)
