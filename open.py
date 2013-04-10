@@ -5,8 +5,11 @@ import tornado
 
 from tornado_proxy.proxy import run_proxy
 
+filename = os.path.abspath('logs/proxy.log')
+if not os.path.exists(os.path.dirname(filename)):
+    os.mkdir(os.path.dirname(filename))
 logging.basicConfig(
-    filename=os.path.abspath('logs/proxy.log'),
+    filename=filename,
     filemode='w',
     format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
     datefmt='%H:%M:%S',
