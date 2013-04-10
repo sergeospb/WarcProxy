@@ -16,9 +16,23 @@ import warc
 Singleton that handles maintaining a single output file for many connections
 
 """
+import urlparse
+import re
+import logging
+
+REGEXP_HOST = re.compile("[^\.]+\.[^\.]+$")
+
+
+def get_hostname(url):
+    hostname = urlparse.urlparse(url).hostname
+    hostname = re.findall(REGEXP_HOST, hostname)[0]
+    return hostname
 
 
 class WarcWriter(object):
+    warc_fp_slots = {}
+    warc_file_n_slots = {}
+
     def __init__(self, outdir='result'):
         max_mb_size = 100
         self.max_size = max_mb_size * 1024 * 1024
@@ -42,10 +56,11 @@ class WarcWriter(object):
 
         db_fname = os.path.join(self.db_index_dir, 'index.db')
         self.db = anydbm.open(db_fname, 'n')
-        self.file_n = 0
-        self.warc_fp = None
-        self.fname_prefix = "%s_" % now
-        self._get_warc_file()
+        #self.file_n = 0
+        #self.warc_fp = None
+        self.fname_prefix = ""
+        self.hostname = None
+        #self._get_warc_file()
 
     @staticmethod
     def now_iso_format():
@@ -56,9 +71,12 @@ class WarcWriter(object):
     def write_record(self, headers, content, response_url, http_code):
         hash_url = hashlib.md5(str(response_url)).hexdigest()
         if hash_url in self.db:
+            logging.debug('Response url in db %s' % response_url)
             return
         self.db[hash_url] = '1'
+        logging.debug('Response url not in db %s' % response_url)
         #Content-Encoding: gzip
+        self.hostname = get_hostname(response_url)
         payload = StringIO()
 
         status_reason = httplib.responses.get(http_code, '-')
@@ -84,23 +102,36 @@ class WarcWriter(object):
         If the current file exceeds the limit defined by `self.max_size`, the
         file is closed and a new one is created.
         '''
-        self.warc_fp.write_record(record)
+        #pdb.set_trace()
+        warc_fp = self.warc_fp_slots.get(self.hostname)
+        if not warc_fp:
+            warc_fp = self._get_warc_file()
+        warc_fp.write_record(record)
+        #pdb.set_trace()
+        #warc_fp.fileobj.flush()
 
-        curr_pos = self.warc_fp.tell()
+        curr_pos = warc_fp.tell()
         if curr_pos > self.max_size:
-            self.warc_fp.close()
-            self.warc_fp = None
+            warc_fp.close()
+            #self.warc_fp_slots[self.hostname]
             self._get_warc_file()
 
     def _get_warc_file(self):
         '''Creates a new Warc file'''
-        assert self.warc_fp is None, 'Current Warc file must be None'
-
-        self.file_n += 1
-        fname = '%s.%s.warc.gz' % (self.fname_prefix, self.file_n)
-        self.warc_fname = os.path.join(self.warc_dir, fname)
-
-        self.warc_fp = warc.open(self.warc_fname, 'w')
+        #assert self.warc_fp is None, 'Current Warc file must be None'
+        if not self.hostname:
+            return
+        file_n = self.warc_file_n_slots.get(self.hostname)
+        if not file_n:
+            file_n = 0
+        file_n += 1
+        self.warc_file_n_slots[self.hostname] = file_n
+        fname = '%s_%s.warc.gz' % (self.hostname, file_n)
+        warc_fname = os.path.join(self.warc_dir, fname)
+        assert os.path.exists(warc_fname) is not True
+        warc_fp = warc.open(warc_fname, 'w')
+        self.warc_fp_slots[self.hostname] = warc_fp
+        return warc_fp
 
 
 warc_writer = WarcWriter()

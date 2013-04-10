@@ -49,7 +49,7 @@ ccs = memcache.ClientPool(['127.0.0.1:11211'], maxclients=5000)
 __all__ = ['ProxyHandler', 'run_proxy']
 from  tornado.httpclient import HTTPResponse
 
-CACHED_CODES = [200, 301, 302, 303, 307]
+CACHED_CODES = [200, 301, 302, 303, 307, 404, ]
 
 _fingerprint_cache = weakref.WeakKeyDictionary()
 
