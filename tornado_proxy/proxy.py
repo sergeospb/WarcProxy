@@ -43,13 +43,12 @@ from scrapy.utils.url import canonicalize_url
 
 import tornadoasyncmemcache as memcache
 
-
 ccs = memcache.ClientPool(['127.0.0.1:11211'], maxclients=5000)
 
 __all__ = ['ProxyHandler', 'run_proxy']
 from  tornado.httpclient import HTTPResponse
 
-CACHED_CODES = [200, 301, 302, 303, 307, 404, ]
+CACHED_CODES = [200, 301, 302, 303, 307, 404, 304]
 
 _fingerprint_cache = weakref.WeakKeyDictionary()
 
@@ -71,6 +70,7 @@ def fingerprint_request(req, arguments=None):
     """
     cache = _fingerprint_cache.setdefault(req, {})
     url = canonicalize_url(req.url)
+    ignore_headers = ['Connection', 'User-Agent', 'Referer', ]
     if url not in cache:
         fp = hashlib.sha1()
         fp.update(str(url))
@@ -79,8 +79,12 @@ def fingerprint_request(req, arguments=None):
         if arguments:
             for name, value in arguments.iteritems():
                 fp.update("%s%s" % (name, value))
+
+        for name, value in req.headers.iteritems():
+            if name in ignore_headers:
+                continue
+            fp.update("%s%s" % (name, value))
         cache[url] = fp.hexdigest()
-        #pdb.set_trace()
     return cache[url]
 
 
@@ -132,7 +136,11 @@ class ProxyHandler(tornado.web.RequestHandler):
                                                  tornado.httpclient.HTTPError):
                 self.set_status(500)
                 self.write('Internal server error:\n' + str(response.error))
-                self.finish()
+                try:
+                    self.finish()
+                except IOError:
+                    pass
+
             else:
                 self.set_status(response.code)
                 for header in ('Date', 'Cache-Control', 'Server',
@@ -144,11 +152,19 @@ class ProxyHandler(tornado.web.RequestHandler):
                     self.write(response.body)
                 if not self._memcached and response.code in CACHED_CODES:
                     def mem_set(data):
-                        pass
+                        try:
+                            self.finish()
+                        except IOError:
+                            pass
 
                     dumped = serialize_response(response)
                     ccs.set(self.fingerprint, dumped, callback=mem_set)
-                self.finish()
+                else:
+                    try:
+                        self.finish()
+                    except IOError:
+                        pass
+
 
         #http://www.squid-cache.org/Doc/config/read_timeout/ 15 min
         #http://www.squid-cache.org/Doc/config/connect_timeout/ 1 min
@@ -171,7 +187,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                     else:
                         self.set_status(500)
                         self.write('Internal server error:\n' + str(e))
-                        self.finish()
+                        try:
+                            self.finish()
+                        except IOError:
+                            pass
             else:
                 response = unserialize_response(dumped, req)
                 self._memcached = True
@@ -222,9 +241,9 @@ class ProxyHandler(tornado.web.RequestHandler):
 
 def run_proxy(port, start_ioloop=True):
     """
-    Run proxy on the specified port. If start_ioloop is True (default),
-    the tornado IOLoop will be started immediately.
-    """
+Run proxy on the specified port. If start_ioloop is True (default),
+the tornado IOLoop will be started immediately.
+"""
 
     app = tornado.web.Application([
                                       (r'.*', ProxyHandler),
